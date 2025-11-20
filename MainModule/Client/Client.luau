@@ -113,6 +113,7 @@ local SERVICES_WE_USE = table.freeze({
 	"TestService",
 	"RunService",
 	"NetworkClient",
+	"EncodingService",
 })
 
 local oldPrint = print
