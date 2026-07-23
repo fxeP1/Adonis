@@ -110,9 +110,8 @@ return function(data, env)
 		end
 
 		for i, v in ipairs({
-			{"Membership", player.MembershipType.Name, "The player's Roblox membership type (Premium)"},
+			{"Membership", data.MembershipStatus or "None", "The player's Roblox membership type. (Plus/Premium)"},
 			{"Can Chat", data.CanChatGet[1] and boolToStr(data.CanChatGet[2]) or "[Error]", "Does the player's account settings allow them to chat?"},
-			{"Safe Chat Enabled", data.SafeChat, "[Admins Only] Does the player have safe chat applied?"},
 			{"Mail Verified", data.MailVerified, "[Admins Only] Does the player have verified their mail?"},
 			{"Phone/ID Verified", data.IDVerified, "[Admins Only] Does the player have verified their non-VoIP phone / ID?"},
 			}) do
@@ -323,7 +322,7 @@ return function(data, env)
 		local groupInfoRef = {}
 
 		local groupCount = 0
-		local ownCount = 0
+		local ownedGroups = {}
 
 		for _, groupInfo in pairs(service.GroupService:GetGroupsAsync(player.UserId) or {}) do
 			Routine(service.ContentProvider.PreloadAsync, service.ContentProvider, {
@@ -334,18 +333,19 @@ return function(data, env)
 			groupInfoRef[groupInfo.Name] = groupInfo
 
 			groupCount += 1
-			if groupInfo.Rank == 255 then
-				ownCount += 1
+
+			local fullGroupInfo = service.GroupService:GetGroupInfoAsync(groupInfo.Id)
+			if fullGroupInfo.Owner.Id == player.UserId then
+				table.insert(ownedGroups, groupInfo.Id)
 			end
 		end
 		table.sort(sortedGroups)
-
 
 		local search = groupstab:Add("TextBox", {
 			Size = UDim2.new(1, -10, 0, 25);
 			Position = UDim2.new(0, 5, 0, 5);
 			BackgroundTransparency = 0.5;
-			PlaceholderText = ("Search %d group%s (%d owned)"):format(groupCount, groupCount ~= 1 and "s" or "", ownCount);
+			PlaceholderText = ("Search %d group%s (%d owned)"):format(groupCount, groupCount ~= 1 and "s" or "", #ownedGroups);
 			Text = "";
 			TextStrokeTransparency = 0.8;
 		})
@@ -372,7 +372,7 @@ return function(data, env)
 				if (groupName:sub(1, #search.Text):lower() == search.Text:lower()) or (groupInfo.Role:sub(1, #search.Text):lower() == search.Text:lower()) then
 					local entry = scroller:Add("TextLabel", {
 						Text = "";
-						ToolTip = string.format("%sID: %d | Rank: %d%s", groupInfo.IsPrimary and "Primary Group | " or "", groupInfo.Id, groupInfo.Rank, groupInfo.Rank == 255 and " (Owner)" or "");
+						ToolTip = string.format("%sID: %d | Rank: %d%s", groupInfo.IsPrimary and "Primary Group | " or "", groupInfo.Id, groupInfo.Rank, table.find(ownedGroups, groupInfo.Id) and " (Owner)" or "");
 						BackgroundTransparency = ((i-1)%2 == 0 and 0) or 0.2;
 						Size = UDim2.new(1, -10, 0, 30);
 						Position = UDim2.new(0, 5, 0, (30*(i-1)));
@@ -394,11 +394,11 @@ return function(data, env)
 						TextXAlignment = "Left";
 						TextTruncate = "AtEnd";
 					})
-					if groupInfo.IsPrimary and groupInfo.Rank >= 255 then
+					if groupInfo.IsPrimary and table.find(ownedGroups, groupInfo.Id) then
 						groupLabel.TextColor3 = Color3.fromRGB(85, 255, 127)
 					elseif groupInfo.IsPrimary then
 						groupLabel.TextColor3 = Color3.fromRGB(170, 255, 255)
-					elseif groupInfo.Rank >= 255 then
+					elseif table.find(ownedGroups, groupInfo.Id) then
 						groupLabel.TextColor3 = Color3.new(1, 1, 0.5)
 					end
 					Routine(function()
