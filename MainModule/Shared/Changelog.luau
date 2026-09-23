@@ -3,7 +3,9 @@ return {
 	"*Drag edges to expand*";
 	"*Report bugs/issues on our repository*";
 	"";
-	"[v282 2026-xx-xx xx:xx UTC] @Dimenpsyonal";
+	"[v282 2026-09-23 12:08 UTC] @Dimenpsyonal";
+	"(Git/joritochip) Revamp command list (#2134)";
+	"(Git/joritochip) Modify donation panel (#2179)";
 	"(Git/TbeyazT) Fix dex (#2160)";
 	"(Git/ffrostfall) Add :velocity command (#2114)";
 	"(Git/SuperCater) Add :persistavataritem command (#2163)";
@@ -12,6 +14,7 @@ return {
 	"(Git/loadstring1) Fix flight changing once you end sentence with e on textchatservice (#2170)";
 	"(Git/Kanuin) Fix argument syntax for displayname command (#2177)";
 	"(Git/ccuser44) Bugfix + improvements & optimization pack (#2144)";
+	"(Git/redmax2500) Add support for a custom fly key in General settings (#2169)";
 	"";
 	"[v281 2026-09-16 19:38 UTC] @Dimenpsyonal";
 	"Remove settings.OnStartup, settings.OnJoin, and settings.OnSpawn";
