@@ -49,6 +49,9 @@ return function(Vargs, GetEnv)
 
 		for _, v in Settings.MusicList or {} do table.insert(Variables.MusicList, v) end
 		for _, v in Settings.InsertList or {} do table.insert(Variables.InsertList, v) end
+		-- These catalogs are developer configuration; later additions need authored display records.
+		Core.RegisterStaticSettingValue("MusicList", Variables.MusicList)
+		Core.RegisterStaticSettingValue("InsertList", Variables.InsertList)
 		for _, v in Settings.CapeList or {} do table.insert(Variables.Capes, v) end
 		for k, v in Settings.Aliases or {} do Variables.Aliases[k] = v end
 		for k, v in Settings.Waypoints or {} do Variables.Waypoints[k] = v end
@@ -102,7 +105,7 @@ return function(Vargs, GetEnv)
 			14380344401, 14366112499, 10725526074, 11402532474, 10725092133, 11445572546, 14192828782, 13702851678, 12929417417, 13675436366, 14755069931,
 			14374802942, 14638203853, 12939016971, 11564337259, 13691524922, 14719366846, 12945457988, 14760102190, 13675155984, 14367119766, 14205146154,
 			14377320953, 14193020364, 11116786674, 13822986276, 14638467750, 10998132528, 13675472848, 14182904315, 12936914000, 12936596034, 14524488089,
-			14478215763, 13684480556, 13822585823, 14754581557, 14401306473, 11821976793, 14193703522, 14760226358,
+			14478215763, 13684480556, 13822585823, 14754581557, 14401306473, 11821976793, 14193703522, 14760226358, 136168187983879,
 			-- R6
 			14366393007, 18446596298,
 			-- R15 custom UGC heads are not supported currently! (And probably never will be lol)

@@ -24,6 +24,8 @@ local CORE_LOADING_ORDER = table.freeze {
 
 	--// Misc
 	"Admin";
+	"TextPolicy";
+	"ChatTransport";
 	"HTTP";
 	"Anti";
 	"Commands";
@@ -94,6 +96,8 @@ local server = {}
 local service = {}
 local RbxEvents = {}
 local ErrorLogs = {}
+	-- Keeps immutable snapshots only for explicitly authored startup notices.
+local startupMessages = {}
 local HookedEvents = {}
 local ServiceSpecific = {}
 local Folder = script.Parent
@@ -115,8 +119,9 @@ local logError = function(plr, err)
 		plr = nil;
 	end
 
+	-- Provider and command exceptions can contain another player's unfiltered input.
 	if server.Core and server.Core.DebugMode then
-		warn(`:: Adonis :: Error: {plr}: {err}`)
+		warn(":: Adonis :: An operation failed; inspect the classified audit event.")
 	end
 
 	if server and server.Logs then
@@ -139,7 +144,7 @@ end
 local function Pcall(func, ...)
 	local pSuccess, pError = pcall(func, ...)
 	if not pSuccess then
-		warn(pError)
+		warn("An Adonis operation failed.")
 		logError(pError)
 	end
 
@@ -191,7 +196,8 @@ local function LoadModule(module, yield, envVars, noEnv, isCore)
 				`CoreModule: {module}`,
 				((noEnv or isRaw or isValue) and plug) or setfenv(plug, GetEnv(getfenv(plug), envVars)),
 				function(err)
-					warn(`Module encountered an error while loading: {module}\n{err}\n{debug.traceback()}`)
+					warn("An Adonis core module failed to load; details are unavailable.")
+					server.Panic(`Core module encountered an error while loading: {module}\n{err}`)
 				end,
 				GetVargTable(),
 				GetEnv
@@ -202,7 +208,7 @@ local function LoadModule(module, yield, envVars, noEnv, isCore)
 				`Plugin: {module}`,
 				((noEnv or isRaw or isValue) and plug) or setfenv(plug, GetEnv(getfenv(plug), envVars)),
 				function(err)
-					warn(`Module encountered an error while loading: {module}\n{err}\n{debug.traceback()}`)
+					warn("An Adonis module failed to load; details are unavailable.")
 				end,
 				GetVargTable()
 			)
@@ -212,7 +218,7 @@ local function LoadModule(module, yield, envVars, noEnv, isCore)
 		server[module.Name] = plug
 	end
 
-	if server.Logs then
+	if server.Logs and server.Logs.AddLog then
 		server.Logs.AddLog(server.Logs.Script,{
 			Text = `Loaded Module: {module}`;
 			Desc = "Adonis loaded a core module or plugin";
@@ -289,6 +295,19 @@ end;
 
 -- TODO: Re-add codename to server but remove it from Variables and directly bake it in to the client too without a remote
 server = {
+	-- Registers developer-authored system text; user text requires an authored TextPolicy record.
+	AddSystemMessage = function(message)
+		local snapshot = type(message) == "table" and table.clone(message) or {Title = "Message", Message = tostring(message)}
+		startupMessages[message] = snapshot
+		table.insert(server.Messages, message)
+	end;
+	-- Projects startup notices without exposing arbitrary plugin/error strings or mutable payloads.
+	ProjectSystemMessage = function(message)
+		local snapshot = startupMessages[message]
+		if snapshot then return table.clone(snapshot) end
+		local record = type(message) == "table" and message.MessageRecord
+		return {Title = "Server notice", Message = server.TextPolicy.GetRecordText(record) or "Notice text unavailable", Level = 300, Time = 10}
+	end;
 	Running = true;
 	Version = 0;
 	Modules = {};
@@ -297,6 +316,51 @@ server = {
 	LogError = logError;
 	ErrorLogs = ErrorLogs;
 	ServerStartTime = os.time();
+	PanicMode = false;
+	Panic = function(reason)
+		server.PanicMode = true -- Immediatly flip the flag before anything else to ensure it works! Don't change!
+
+		warn("SOMETHING SEVERE HAPPENED; ENABLING PANIC MODE; REASON BELOW;") -- TODO: Put all the messages to logerror and scriptlogs
+		warn("An internal error occurred; details are unavailable.")
+		warn("ENABLING CHAT MODE AND DISABLING CLIENT CHECKS;")
+		warn("MODS NOW HAVE ACCESS TO PANIC COMMANDS SUCH AS :SHUTDOWN")
+
+		server._tempBackupHint = server._tempBackupHint or service.New("Hint", {
+			Text = "~= Adonis PanicMode Enabled =~",
+			Name = `ADONIS_TEMPHINT_{server.CodeName}`,
+			Archivable = false,
+			Parent = workspace,
+		})
+
+		--[[
+		for _, v in ipairs(service.Players:GetPlayers()) do
+			cPcall(function()
+				v.Chatted:Connect(function(msg)
+					Process.Chat(v, msg)
+				end)
+			end)
+		end
+		--]]
+
+		service.Debris:AddItem(service.New("Message", {
+			Text = "System Message:\n\nA critical error occurred in Adonis. Panic mode has been enabled. Error details are unavailable.",
+			Name = `ADONIS_TEMPMESSAGE_{server.CodeName}_{math.random()}`,
+			Archivable = false,
+			Parent = workspace,
+		}), 30)
+		print(string.rep(string.reverse("!RAEN ERA SNWOLC EHT\n"), math.random(1, 25)))
+
+		pcall(function()
+			server.Core.PanicMode = true
+		end)
+
+		if server.Logs and server.Logs.AddLog then
+			pcall(server.Logs.AddLog, server.Logs.Script, {
+				Text = "ENABLED PANIC MODE";
+				Desc = tostring(reason);
+			})
+		end
+	end;
 };
 
 locals = {
@@ -534,12 +598,13 @@ return service.NewProxy({
 		setfenv(1, setmetatable({}, {__metatable = unique}))
 
 		--// Server Variables
-		local setTab = require(server.Deps.DefaultSettings)
-		server.Defaults = setTab
+		local setTab = select(2, xpcall(require, server.Panic, server.Deps:FindFirstChild("DefaultSettings"))) or { Settings = {}, Descriptions = {}, Order = {} }
+		server.Defaults = setTab or {}
 		server.Settings = data.Settings or setTab.Settings or {}
 		server.OriginalSettings = service.DeepCopy(server.Settings, true)
 		server.Descriptions = data.Descriptions or setTab.Descriptions or {}
-		server.Messages = data.Messages or setTab.Settings.Messages or {}
+		server.Messages = {}
+		for _, message in data.Messages or setTab.Settings.Messages or {} do server.AddSystemMessage(message) end
 		server.Order = data.Order or setTab.Order or {}
 		server.Data = data
 		server.Model = data.Model or service.New("Model")
@@ -627,37 +692,15 @@ return service.NewProxy({
 		server.CleanUp = CleanUp
 
 		--// Require some dependencies
-		server.Typechecker = require(server.Shared.Typechecker)
-		server.Changelog = require(server.Shared.Changelog)
+		server.Typechecker = select(2, xpcall(require, server.Panic, server.Shared:FindFirstChild("Typechecker")))
+		server.Changelog = select(2, xpcall(require, server.Panic, server.Shared:FindFirstChild("Changelog")))
 		server.Version = server.Changelog and tonumber(string.match(server.Changelog[1], "^%[?%w*:? ?[Vv]?(%d+)")) or server.Version -- Set server version from changelog
-		server.Credits = require(server.Shared.Credits)
-		server.DLL = require(server.Shared.DoubleLinkedList)
-		server.FormattedChangelog = table.create(#server.Changelog)
-
-		--// Create formatted changelog from standard changelog
-	  	local function applyColour(line)
-			local prefix = line:sub(1, 2)
-
-  	  	  	if prefix == "[v" or prefix == "[1" or prefix == "[0" or prefix == "1." or line:sub(1, 1) == "v" then
-      	  	  	return `<font color='#8FAEFF'>{line}</font>`
-  	  	  	elseif line:sub(1, 6) == "[Patch" then
-  	  	  	  	return `<font color='#F0B654'>{line}</font>`
-  	  	  	elseif line:sub(1, 9) == "Version: " then
-				return `<b>{line}</b>`
-			elseif line:sub(1,2) == "# " then
-				return `<b>{string.sub(line, 3)}</b>`
-			else
-  	  	  	  	return line
-  	  	  	end
-	  	end
-
-	  	for i, line in ipairs(server.Changelog) do
-          	server.FormattedChangelog[i] = applyColour(line)
-  	  	end
+		server.Credits = select(2, xpcall(require, server.Panic, server.Shared:FindFirstChild("Credits")))
+		server.DLL = select(2, xpcall(require, server.Panic, server.Shared:FindFirstChild("DoubleLinkedList")))
 
 		--// Setup MaterialIcons
 		do
-			local MaterialIcons = require(server.Shared.MatIcons)
+			local MaterialIcons = select(2, xpcall(require, server.Panic, server.Shared:FindFirstChild("MatIcons")))
 			server.MatIcons = setmetatable({}, {
 				__index = function(self, ind)
 					local materialIcon = MaterialIcons[ind]
@@ -673,19 +716,23 @@ return service.NewProxy({
 
 		--// Load services
 		for ind, serv in ipairs(SERVICES_WE_USE) do
-			local temp = service[serv]
+			if not service[serv] then
+				server.Panic(`CRITICAL SERVICE {serv} IS MISSING!!!`)
+			end
 		end
 
 		--// Load core modules
 		for _, load in ipairs(CORE_LOADING_ORDER) do
 			local CoreModule = Folder.Core:FindFirstChild(load)
 			if CoreModule then
-				LoadModule(CoreModule, true, nil, nil, true) --noenv, CoreModule
+				xpcall(LoadModule, server.Panic, CoreModule, true, nil, nil, true) --noenv, CoreModule
+			else
+				server.Panic(`CORE MODULE {load} IS MISSING!!!`)
 			end
 		end
 
 		--// Server Specific Service Functions
-		ServiceSpecific.GetPlayers = server.Functions.GetPlayers
+		ServiceSpecific.GetPlayers = server.Functions and server.Functions.GetPlayers
 
 		--// Initialize Cores
 		local runLast = {}
@@ -713,35 +760,35 @@ return service.NewProxy({
 					end
 
 					if core.Init then
-						core.Init(data)
+						xpcall(core.Init, server.Panic, data)
 						core.Init = nil
 					end
 				end
 			end
-		end
+		end;
 
 		--// Variables that rely on core modules being initialized
-		server.Logs.Errors = ErrorLogs
-		server.Core.SilentStartup = data.SilentStartup
+		(server.Logs or {}).Errors = ErrorLogs;
+		(server.Core or {}).SilentStartup = data.SilentStartup;
 
 		--// Load any afterinit functions from modules (init steps that require other modules to have finished loading)
 		for _, f in ipairs(runAfterInit) do
-			f(data)
+			xpcall(f, server.Panic, data)
 		end
 
 		--// Load Plugins; enforced NoEnv policy, make sure your plugins has the 2nd argument defined!
 		for _, module in ipairs(server.PluginsFolder:GetChildren()) do
-			LoadModule(module, false, {script = module}, true, true) --noenv
+			xpcall(LoadModule, server.Panic, module, false, {script = module}, true, true) --noenv
 		end
 
 		for _, module in ipairs(data.ServerPlugins or {}) do
 			task.defer(xpcall, LoadModule, function(reason)
-				warn(`The plugin {type(module) == "string" and string.sub(module, 1, 15) or module} failed to load! Reason: {reason}`)
+				warn("An Adonis plugin failed to load; details are unavailable.")
 				logError(`The plugin {type(module) == "string" and string.sub(module, 1, 15) or module} failed to load! Reason: {reason}`)
-				table.insert(server.Messages, {
-					Title = `The plugin {type(module) == "string" and string.sub(module, 1, 15) or module} failed to load!`,
-					Icon = "maticon://Dangerous",
-					Message = string.match(reason, "Requested module experienced an error while loading") and "The plugin has invalid code or the code fails before return!" or string.match(reason, "Module code did not return exactly one value") and "The plugin returns an invalid amount of values or returns nothing at all!" or `Reason {reason}`,
+				server.AddSystemMessage({
+					Title = "A plugin failed to load",
+					Icon = "MatIcon://Dangerous",
+					Message = "The plugin could not start. Error details are unavailable.",
 					Time = 15
 				})
 			end, module, false, {script = module, cPcall = server.cPcall})
@@ -749,7 +796,7 @@ return service.NewProxy({
 
 		--// We need to do some stuff *after* plugins are loaded (in case we need to be able to account for stuff they may have changed before doing something, such as determining the max length of remote commands)
 		for _, f in ipairs(runAfterPlugins) do
-			f(data)
+			xpcall(f, server.Panic, data)
 		end
 
 		-- // Load sourcecode clientside plugins
@@ -772,7 +819,7 @@ return service.NewProxy({
 
 		--// Stuff to run after absolutely everything else has had a chance to run and initialize and all that
 		for _, f in ipairs(runLast) do
-			f(data)
+			xpcall(f, server.Panic, data)
 		end
 
 		if data.Loader and not silentStartup then
@@ -781,17 +828,17 @@ return service.NewProxy({
 			print(`Loading version {data.NightlyMode and "Nightly" or server.Version} Complete; No loader location provided`)
 		end
 
-		if server.Logs then
+		if server.Logs and server.Logs.AddLog then
 			server.Logs.AddLog(server.Logs.Script, {
 				Text = `Finished loading version {data.NightlyMode and "Nightly" or server.Version}`;
 				Desc = `Adonis has finished loading version {data.NightlyMode and "Nightly" or server.Version} by {data.Loader and data.Loader:GetFullName() or "UNKNOWN"}{data.LoaderVersion and (" version: "..data.LoaderVersion) or ""}`;
 			})
 		else
-			warn("CRITICAL ERROR! SERVER.LOGS TABLE IS MISSING. THIS SHOULDN'T HAPPEN! SOMETHING WENT WRONG WHILE LOADING CORE MODULES(?)");
+			server.Panic("CRITICAL ERROR! SERVER.LOGS TABLE IS MISSING. THIS SHOULDN'T HAPPEN! SOMETHING WENT WRONG WHILE LOADING CORE MODULES(?)");
 		end
 		service.Events.ServerInitialized:Fire();
 
-		return "SUCCESS"
+		return server.PanicMode ~= true and "SUCCESS" or "FAILED"
 	end;
 	__tostring = function()
 		return "Adonis"
