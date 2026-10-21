@@ -1,17 +1,37 @@
 --// This copy may be outdated
 
 return {
-	MessageVersion = 5;					--// Message version/number
-	MessageAdminType = 900;  			--// Minimum admin level to be notified (Or Donors or Players or nil to not notify)
-	MessageDate = "1707264000";			--// Time of message creation
-	MessageDuration = 60*60*24*7; 	--// How long should we notify people about this message
-	LastDateTime = "2024-02-07 00:00:01 UTC";
-	Messages = {
+	MessageVersion = 6;					--// Message version/number
+	MessageAdminType = 300;  			--// Minimum admin level to be notified (Or Donors or Players or nil to not notify)
+	MessageDate = "1792018800";			--// Time of message creation
+	MessageDuration = 60*60*24*1; 	--// How long should we notify people about this message
+	LastDateTime = "2026-10-15 00:00 UTC";
+	Messages = table.freeze({
 		"YOU WILL ONLY BE NOTIFIED ONCE PER GAME ON JOIN, WHEN THERE ARE NEW MESSAGES.";
 		"THESE ARE IMPORTANT ANNOUNCEMENTS RELATED TO ADONIS AND ADONIS USERS.";
 		"IMPACTED USERS WILL BE NOTIFIED ONCE ON THEIR FIRST JOIN AFTER AN URGENT MESSAGE.";
 		"NOTIFICATIONS WILL ONLY HAPPEN FOR A SET TIME (WEEK AVG) AFTER THE MESSAGE WAS ADDED.";
 		"PLEASE READ THE MOST RECENT MESSAGE CAREFULLY AS IT LIKELY AFFECTS YOU AND YOUR USERS.";
+		"";
+		"[MEDIUM - DATE: 2026-10-15 00:00 UTC]";
+		"[DURATION: 1 DAY]";
+		"[NOTIFY: ALL LEVEL 300 AND HIGHER]";
+		"RECENTLY ROBLOX HAS MANDATED RESTRICTIONS REGARDING USER INPUT;";
+		"AND ADONIS HAS HAD TO RESTRICT ALL COMMANDS CONTAINING TEXTUAL USER INPUT!";
+		"DUE THIS WE'VE HAD TO IMPLEMENT SEVERAL EMERGENCY RESTRICTIONS REGARDING;";
+		"MANY COMMANDS THAT HAVE TEXTUAL USER INPUT!";
+		"THIS WILL LIKELY RESULT IN BROKEN FUNCTIONALITY FOR MANY COMMANDS!";
+		"Stay tuned as we are working to resolve this issue.";
+		"Plugins interacting with any of these commands or other internal chat APIs;";
+		"are likely to be broken.";
+		"If your game has been taken down due to issues relating to automated TCS/Text ChatService";
+		"issues, be sure to contact Roblox support to get the moderation issue resolved.";
+		"Additionally, if you have installed custom plugins that re-implement the original";
+		"Adonis chat, be aware they should be removed as they can result in moderation action.";
+		"[END_OF_MESSAGE 2026-10-15 00:00 UTC]";
+		"";
+		"";
+		"PREVIOUS ALERTS:";
 		"";
 		"[LOW - DATE: 2024-02-07 00:00 UTC]";
 		"[DURATION: 7 DAYS]";
@@ -25,9 +45,6 @@ return {
 		"Completely unrelated to this, we have also disabled the serverside AC protections for HumanoidDeletion and HatProtection";
 		"so enable workspace.RejectCharacterDeletions if you haven't already.";
 		"[END_OF_MESSAGE 2024-02-07 00:00 UTC]";
-		"";
-		"";
-		"PREVIOUS ALERTS:";
 		"";
 		"[LOW - DATE: 2021-9-4 19:27 UTC]";
 		"[DURATION: 7 DAYS]";
@@ -98,5 +115,5 @@ return {
 		"Personally, I'd prefer not to do this but the risk and severity is high enough to warrant it.";
 		"- Davey_Bones (Sceleratis)";
 		"[END_OF_MESSAGE 2020-1-8 23:38 UTC]";
-	}
+	});
 }

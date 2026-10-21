@@ -318,6 +318,7 @@ return function(Vargs, GetEnv)
 		RateLimit = RateLimit;
 		newRateLimit = newRateLimit;
 		MsgStringLimit = 500; --// Max message string length to prevent long length chat spam server crashing (chat & command bar); Anything over will be truncated;
+		AdminMsgStringLimit = 5000;
 		MaxChatCharacterLimit = 250; --// Roblox chat character limit; The actual limit of the Roblox chat's textbox is 200 characters; I'm paranoid so I added 50 characters; Users should not be able to send a message larger than that;
 		RemoteMaxArgCount = 5; --// The maximum argument count Adonis will take from Remote (alter if your script requires more arguments)
 		RateLimits = {
@@ -437,8 +438,11 @@ return function(Vargs, GetEnv)
 		Command = function(p, msg, opts, noYield)
 			opts = opts or {}
 
-			if #msg > Process.MsgStringLimit and type(p) == "userdata" and p:IsA("Player") and not Admin.CheckAdmin(p) then
-				msg = string.sub(msg, 1, Process.MsgStringLimit)
+			if type(p) == "userdata" and p:IsA("Player") then
+				local limit = if Admin.CheckAdmin(p) then Process.AdminMsgStringLimit else Process.MsgStringLimit
+				if #msg > limit then
+					msg = string.sub(msg, 1, limit)
+				end
 			end
 
 			msg = Functions.Trim(msg)
@@ -458,6 +462,20 @@ return function(Vargs, GetEnv)
 					opts.OverrideArgs = overrideArgs
 				end
 			else
+				local aliasKey, aliasExec = Admin.IsAlias(p, Functions.Trim(msg))
+				if aliasKey then
+					local isRecursive = Admin.IsRecursiveAlias(p, aliasKey, aliasExec)
+					if isRecursive then
+						Remote.MakeGui(p, "Output", {
+							Title = "Alias error";
+							Message = if isRecursive == true
+								then "Your alias was infinitely recursive and has not been run."
+								else isRecursive;
+						})
+						return
+					end
+				end
+
 				msg = Admin.AliasFormat(Admin.GetAliases(p), msg) or msg
 
 				if string.match(msg, Settings.BatchKey) then
@@ -508,8 +526,11 @@ return function(Vargs, GetEnv)
 				local cmdArgs = command.Args or command.Arguments
 				local argString = string.match(msg, `^.-{Settings.SplitKey}(.+)`) or ""
 				local args = (opts.Args or opts.Arguments) or (#cmdArgs > 0 and Functions.Split(argString, Settings.SplitKey, #cmdArgs)) or {}
+				local chatInput = server.ChatTransport.CommandInput(p, command, args, opts)
 
-				local taskName = string.format("Command :: %s : (%s)", p.Name, msg)
+				local hasUserText = type(command.UserText) == "table" and type(command.UserText.Args) == "table"
+				local commandDisplay = if command.NoLog or hasUserText then matched else msg
+				local taskName = string.format("Command :: %s : (%s)", p.Name, commandDisplay)
 
 				if #args > 0 and not isSystem and command.Filter or opts.Filter then
 					for i, arg in args do
@@ -548,7 +569,7 @@ return function(Vargs, GetEnv)
 					end
 				end
 
-				if (opts.CrossServer or (not isSystem and not opts.DontLog)) and not command.NoLog then
+				if (opts.CrossServer or (not isSystem and not opts.DontLog)) and not command.NoLog and not hasUserText then
 					local noSave = command.AdminLevel == "Player" or command.Donors or command.AdminLevel == 0
 					AddLog("Commands", {
 						Text = `{((opts.CrossServer and "[CRS_SERVER] ") or "")}{p.Name}`;
@@ -579,7 +600,7 @@ return function(Vargs, GetEnv)
 									Message = cmdError,
 								})
 								if Core.DebugMode == true then
-									warn(`Encountered an error while running a command: {msg}\n{cmdError}\n{debug.traceback()}`)
+									warn(`Encountered an error while running a command: {commandDisplay}\n{cmdError}\n{debug.traceback()}`)
 								end
 							end
 						elseif cmdError ~= nil and cmdError ~= true and not isSystem then
@@ -590,14 +611,23 @@ return function(Vargs, GetEnv)
 					end
 				end, p, args, {
 					PlayerData = pDat,
-					Options = opts
+					Options = opts,
+					ChatInput = chatInput,
 				}))
 				local ran, cmdError = returnArgs[1], returnArgs[2]
 
+				local commandEventMessage = if command.NoLog or hasUserText then matched else msg
+				local commandEventArgs = args
+				if hasUserText then
+					commandEventArgs = table.clone(args)
+					for _, index in command.UserText.Args do
+						commandEventArgs[index] = "[sent through TextChannel]"
+					end
+				end
 				service.Events.CommandRan:Fire(p, {
-					Message = msg,
+					Message = commandEventMessage,
 					Matched = matched,
-					Args = args,
+					Args = commandEventArgs,
 					Command = command,
 					Index = index,
 					Success = ran,
@@ -854,7 +884,7 @@ return function(Vargs, GetEnv)
 			task.delay(1, function()
 				if not service.Players:GetPlayerByUserId(p.UserId) then
 					Core.PlayerData[key] = nil
-					
+
 					if Remote.Clients[key] then
 						Remote.Clients[key] = nil
 			        end
@@ -890,7 +920,7 @@ return function(Vargs, GetEnv)
 				["PlatformKick"] = "Kicked by Roblox",
 				["CreatorKick"] = "Kicked by Creator"
 			}
-			
+
 			local reason = reasons[r.Name] or r.Name
 
 			AddLog("Leaves", {
@@ -957,14 +987,14 @@ return function(Vargs, GetEnv)
 				table.remove(players, index);
 				if #players == 0 then
 					Variables.Tags[name] = nil;
-					
+
 					AddLog("Script", {
 						Text = `Tag "{name}" was removed because the last player who was in it left`;
 						Desc = `Tag "{name}" was removed`;
 					})
 				end
 			end
-			
+
 			Variables.PersistedItems[tostring(p.UserId)] = nil
 		end;
 
@@ -1148,9 +1178,15 @@ return function(Vargs, GetEnv)
 
 				--// GUI loading
 				if Variables.NotifMessage then
-					Remote.MakeGui(p, "Notif", {
-						Message = Variables.NotifMessage
-					})
+					local legacyRecipients, textChatRecipients = Functions.SplitAnnouncementRecipients({p})
+					if #legacyRecipients > 0 then
+						Remote.MakeGui(p, "Notif", {
+							Message = Variables.NotifMessage
+						})
+					end
+					if #textChatRecipients > 0 then
+						Functions.DisplayAnnouncementInTextChat("Notice", Variables.NotifMessage, textChatRecipients)
+					end
 				end
 
 				if
@@ -1199,10 +1235,10 @@ return function(Vargs, GetEnv)
 				if Speed then
 					Hum.WalkSpeed = Speed
 				end
-				
+
 				local Items = Variables.PersistedItems[tostring(p.UserId)]
 				if Items then
-					
+
 					for _,item in Items do
 						server.Commands.AvatarItem.Function(p, {"me", tostring(item)})
 					end

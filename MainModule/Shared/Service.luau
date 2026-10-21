@@ -606,7 +606,10 @@ return function(errorHandler, eventChecker, fenceSpecific, env)
 				local ran, newl = pcall(function()
 					return service.TextService:FilterStringAsync(lines[i], from.UserId):GetNonChatStringForUserAsync(to.UserId)
 				end)
-				new[i] = ran and newl or lines[i] or ""
+				if not ran then
+					error(`Text filtering failed: {newl}`)
+				end
+				new[i] = newl
 			end
 			return new and table.concat(new, "\n") or "Filter Error"
 		end;
@@ -639,8 +642,13 @@ return function(errorHandler, eventChecker, fenceSpecific, env)
 			local lines = service.ExtractLines(str)
 			local new = table.create(#lines)
 			for i = 1, #lines do
-				local ran, newl = pcall(function() return service.TextService:FilterStringAsync(lines[i], from.UserId):GetNonChatStringForBroadcastAsync() end)
-				new[i] = ran and newl or lines[i] or ""
+				local ran, newl = pcall(function()
+					return service.TextService:FilterStringAsync(lines[i], from.UserId):GetNonChatStringForBroadcastAsync()
+				end)
+				if not ran then
+					error(`Text filtering failed: {newl}`)
+				end
+				new[i] = newl
 			end
 			return new and table.concat(new, "\n") or "Filter Error"
 		end;
@@ -1493,7 +1501,7 @@ return function(errorHandler, eventChecker, fenceSpecific, env)
 		SelfEvent = function(signal, func) local rbxevent = service.RbxEvent(signal, function(...) func(...) end) end;
 		DelRbxEvent = function(signal) for i, v in RbxEvents do if v == signal then v:Disconnect() table.remove(RbxEvents, i) end end end;
 		SanitizeString = function(str) return string.gsub(service.Trim(str), "[%c%z\n]", "") end;
-		Trim = function(str) return string.match(str,"^%s*(.-)%s*$") end;
+		Trim = function(str) local from = string.match(str, "^%s*()") if from > #str then return "" end return string.match(str, ".*%S", from) end;
 		Localize = function(obj, readOnly) local Localize = service.Localize local ReadOnly = service.ReadOnly if type(obj) == "table" then local newTab = {} for i in obj do newTab[i] = Localize(obj[i], readOnly) end return (readOnly and ReadOnly(newTab)) or newTab else return obj end end;
 		RawEqual = function(obj1, obj2) return service.UnWrap(obj1) == service.UnWrap(obj2) end;
 		CheckProperty = function(obj, prop) return pcall(function() return obj[prop] end) end;

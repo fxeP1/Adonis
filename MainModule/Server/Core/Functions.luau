@@ -8,6 +8,27 @@ return function(Vargs, GetEnv)
 
 	local logError
 	local Functions, Admin, Anti, Core, HTTP, Logs, Remote, Process, Variables, Settings
+	local ANNOUNCEMENT_REPLY_COMMANDS = {
+		"Message";
+		"TimeMessage";
+		"Notify";
+		"CustomNotify";
+		"SystemMessage";
+		"SystemNotify";
+		"Hint";
+		"TimeHint";
+		"CustomMessage";
+		"Broadcast";
+		"Notif";
+		"ChatNotify";
+		"PrivateMessage";
+		"PrivateChat";
+		"MessagePM";
+		"NotifyPM";
+		"Alert";
+		"MakeTalk";
+	}
+
 	local function Init()
 		Functions = server.Functions;
 		Admin = server.Admin;
@@ -583,14 +604,16 @@ return function(Vargs, GetEnv)
 
 				--// This is for player commands that take in service.GetPlayers() to make sure someone isnt passing in a message that is insanely long
 				local PlrLevel = if plr then Admin.GetLevel(plr) else 0
-				local AllowUnsafeSelectors = PlrLevel > 0 or options.AllowUnsafeSelectors
+				local IsUnsafeSelectorSource = PlrLevel > 0 or options.AllowUnsafeSelectors
 				local MaxSelectors = Variables.MaxSafeSelectors or 400 -- 400 seems like a good "max" that won't ever be reached
+				local MaxAdminSelectors = Variables.MaxAdminSafeSelectors or 2000
+				local SelectorCap = if IsUnsafeSelectorSource then MaxAdminSelectors else MaxSelectors
 
 				local index = 0
 
 				for s in selectors do
 					index += 1
-					if not AllowUnsafeSelectors and index > MaxSelectors then
+					if index > SelectorCap then
 						break
 					end
 					local plrCount = 0
@@ -652,13 +675,9 @@ return function(Vargs, GetEnv)
 							if plrCount == 0 then
 								if options.UseFakePlayer then
 									--// Attempt to retrieve non-ingame user
-									local UserId
-									if Functions.GetUserIdFromNameAsync(s) then
-										UserId = Functions.GetUserIdFromNameAsync(s)
-									else
-										if tonumber(s) then
-											UserId = s
-										end
+									local UserId = Functions.GetUserIdFromNameAsync(s)
+									if not UserId and tonumber(s) then
+										UserId = s
 									end
 									if UserId or options.AllowUnknownUsers then
 										table.insert(players, Functions.GetFakePlayer({
@@ -972,6 +991,50 @@ return function(Vargs, GetEnv)
 					Title = title;
 					Image = image;
 				})
+			end
+		end;
+
+		-- Splits announcement recipients by reply-command access while keeping the sender on the legacy UI.
+		SplitAnnouncementRecipients = function(players, sender)
+			local legacyRecipients = {}
+			local textChatRecipients = {}
+
+			for _, player in players do
+				if player == sender then
+					table.insert(legacyRecipients, player)
+					continue
+				end
+
+				local playerData = {
+					Player = player;
+					Level = Admin.GetLevel(player);
+					isDonor = false;
+				}
+				local canReply = false
+				for _, commandName in ANNOUNCEMENT_REPLY_COMMANDS do
+					local command = server.Commands[commandName]
+					if command and Admin.CheckPermission(playerData, command, true) then
+						canReply = true
+						break
+					end
+				end
+				table.insert(if canReply then textChatRecipients else legacyRecipients, player)
+			end
+
+			if #textChatRecipients > 0 then
+				assert(service.TextChatService
+					and service.TextChatService.ChatVersion == Enum.ChatVersion.TextChatService,
+					"TextChatService is required to deliver announcements to players who can reply.")
+			end
+			return legacyRecipients, textChatRecipients
+		end;
+
+		-- Displays a filtered admin announcement in the recipient's TextChatService chat window.
+		DisplayAnnouncementInTextChat = function(title, message, players)
+			if #players == 0 then return end
+			local text = `{service.SanitizeXML(title)}: {service.SanitizeXML(message)}`
+			for _, player in players do
+				Remote.Send(player, "Function", "DisplaySystemMessageInTextChat", nil, text)
 			end
 		end;
 
@@ -1476,7 +1539,11 @@ return function(Vargs, GetEnv)
 		end;
 
 		Trim = function(str)
-			return string.match(str, "^%s*(.-)%s*$")
+			local from = string.match(str, "^%s*()")
+			if from > #str then
+				return ""
+			end
+			return string.match(str, ".*%S", from)
 		end;
 
 		RoundToPlace = function(num, places)
